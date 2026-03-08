@@ -4,6 +4,21 @@ from telegram.ext import Application, MessageHandler, CallbackQueryHandler, filt
 from handlers.bot_handlers import *
 from handlers.bot_messages import *
 from configs.url_shit import my_bot_token
+import httpx
+import warnings
+
+# DEEP FIX: Global monkeypatch to disable SSL verification for all httpx requests
+# This ensures even the Telegram library's internal calls ignore SSL errors in this environment
+original_init = httpx.AsyncClient.__init__
+def patched_init(self, *args, **kwargs):
+    kwargs['verify'] = False
+    original_init(self, *args, **kwargs)
+httpx.AsyncClient.__init__ = patched_init
+# Suppress InsecureRequestWarning
+from urllib3.exceptions import InsecureRequestWarning
+import requests
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+warnings.filterwarnings("ignore", category=UserWarning, module="httpx")
 
 async def reply(update, context):
     chatid = update.message.chat_id
@@ -32,10 +47,6 @@ async def reply(update, context):
         await search_engine(user_message, chatid, context)
 
 async def post_init(application: Application):
-    # DYNAMIC FIX: Always clear webhook on startup to prevent Conflict error
-    print("DEBUG: Clearing any existing webhooks...")
-    await application.bot.delete_webhook(drop_pending_updates=True)
-    
     await application.bot.set_my_commands([
         ("start", "Start the bot"),
         ("movies", "Get currently playing movies"),
@@ -43,9 +54,13 @@ async def post_init(application: Application):
         ("help", "Show help and tips"),
     ])
 
+async def error_handler(update, context):
+    print(f"ERROR: Exception while handling an update: {context.error}")
+
 if __name__ == '__main__':
     token = my_bot_token()
     application = Application.builder().token(token).post_init(post_init).build()
+    application.add_error_handler(error_handler)
     hdl = MessageHandler(filters.TEXT & (~filters.COMMAND), reply)
     # Command handlers
     from telegram.ext import CommandHandler
@@ -56,7 +71,7 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler("jav", lambda u, c: reply(u, c))) # Reuse reply logic for /jav
     
     application.add_handler(hdl)
-    application.add_handler(CallbackQueryHandler(handle_torrent_selection, pattern="^hash_"))
+    application.add_handler(CallbackQueryHandler(handle_torrent_selection, pattern="^(hash_|search_|spage_|jpage_)"))
     application.add_handler(CallbackQueryHandler(handle_ijav_download, pattern="^ijavdl_"))
     
     # DYNAMIC FIX: Use drop_pending_updates=True and a clean polling start

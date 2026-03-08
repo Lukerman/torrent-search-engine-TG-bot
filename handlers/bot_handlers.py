@@ -215,10 +215,16 @@ async def load_more(chatid, context):
         await context.bot.send_message(chat_id=chatid, text=f"Error fetching movies: {str(e)[:100]}")
 
 
-async def search_engine(user_message, chatid, context):
+async def search_engine(user_message, chatid, context, page=1):
+    original_query = user_message
     user_message = user_message.replace("_", " ").replace("/", "")
     URL = f"{pirat_api()}q.php?q={urllib.parse.quote(user_message)}"
-    update1 = await context.bot.send_message(chat_id=chatid, text=f"Please wait..Searching for '{user_message}' on APIBay")
+    
+    status_text = f"Please wait..Searching for '{user_message}' on APIBay"
+    if page > 1:
+        status_text += f" (Page {page})"
+    
+    update1 = await context.bot.send_message(chat_id=chatid, text=status_text)
 
     try:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}, verify=False) as client:
@@ -231,20 +237,42 @@ async def search_engine(user_message, chatid, context):
                 await jav_search(user_message, chatid, context)
                 return
 
-            text_lines = [f"🔍 <b>Search Results for '{user_message}':</b>\n"]
+            results_per_page = 5
+            start_idx = (page - 1) * results_per_page
+            end_idx = start_idx + results_per_page
+            
+            page_data = data[start_idx:end_idx]
+            
+            if not page_data and page > 1:
+                await context.bot.edit_message_text(chat_id=chatid, message_id=update1.message_id, text="No more results found.")
+                return
+
+            text_lines = [f"🔍 <b>Search Results for '{user_message}' (Page {page}):</b>\n"]
             keyboard_row = []
             
-            for idx, item in enumerate(data[:5], start=1): # LIMIT TO TOP 5 search results
+            for i, item in enumerate(page_data, start=1):
+                display_idx = start_idx + i
                 title = item.get("name", "Unknown Title")
                 info_hash = item.get("info_hash", "")
                 size_str = format_size(item.get("size", "0"))
                 seeders = item.get("seeders", "N/A")
                 
-                text_lines.append(f"{idx}. <b>{title}</b>")
+                text_lines.append(f"{display_idx}. <b>{title}</b>")
                 text_lines.append(f"   💾 {size_str} 🟢 Seeders: {seeders}\n")
-                keyboard_row.append(telegram.InlineKeyboardButton(str(idx), callback_data=f"hash_{idx}_{info_hash}"))
+                # Use display_idx so handler knows which title to extract
+                keyboard_row.append(telegram.InlineKeyboardButton(str(display_idx), callback_data=f"hash_{display_idx}_{info_hash}"))
                 
-            reply_markup = telegram.InlineKeyboardMarkup([keyboard_row])
+            pagination_row = []
+            if page > 1:
+                pagination_row.append(telegram.InlineKeyboardButton("⬅️ Prev", callback_data=f"spage_{page-1}_{original_query}"))
+            if len(data) > end_idx:
+                pagination_row.append(telegram.InlineKeyboardButton("Next ➡️", callback_data=f"spage_{page+1}_{original_query}"))
+                
+            keyboard = [keyboard_row]
+            if pagination_row:
+                keyboard.append(pagination_row)
+                
+            reply_markup = telegram.InlineKeyboardMarkup(keyboard)
             final_text = "\n".join(text_lines)
             
             await context.bot.send_message(
@@ -257,6 +285,8 @@ async def search_engine(user_message, chatid, context):
             await context.bot.delete_message(chat_id=chatid, message_id=update1.message_id) 
 
     except Exception as e:
+        import traceback
+        print(f"DEBUG Search Engine Error: {traceback.format_exc()}")
         await context.bot.edit_message_text(chat_id=chatid, message_id=update1.message_id, text=f"Error fetching data: {str(e)[:100]}")
 
 async def process_magnet_to_torrent(chatid, context, magnet_link):
@@ -324,12 +354,40 @@ async def process_magnet_to_torrent(chatid, context, magnet_link):
 
 async def handle_torrent_selection(update, context):
     query = update.callback_query
+    if not query:
+        return
+    print(f"DEBUG: Callback received: {query.data}")
     await query.answer()
     
+    # Defensive check: ensure message exists
+    if not query.message:
+        print("DEBUG: Callback query message is missing.")
+        return
+
     # Handle search triggers from rich previews
     if query.data.startswith("search_"):
         search_query = query.data.replace("search_", "")
         await search_engine(search_query, query.message.chat_id, context)
+        return
+
+    # Handle search pagination
+    if query.data.startswith("spage_"):
+        # Format: spage_{page}_{query}
+        parts = query.data.split("_", 2)
+        if len(parts) >= 3:
+            page = int(parts[1])
+            search_query = parts[2]
+            await search_engine(search_query, query.message.chat_id, context, page=page)
+        return
+
+    # Handle JAV pagination
+    if query.data.startswith("jpage_"):
+        # Format: jpage_{page}_{query}
+        parts = query.data.split("_", 2)
+        if len(parts) >= 3:
+            page = int(parts[1])
+            search_query = parts[2]
+            await jav_search(search_query, query.message.chat_id, context, page=page)
         return
 
     # Expected format: hash_{idx}_{info_hash}
@@ -343,10 +401,11 @@ async def handle_torrent_selection(update, context):
     title = "download"
     try:
         # Extract title from the message text block
-        if query.message and query.message.text:
+        if query.message.text:
             text = query.message.text
-            part = text.split(f"{idx}. ")[1]
-            title = part.split("\n")[0].strip()
+            if f"{idx}. " in text:
+                part = text.split(f"{idx}. ")[1]
+                title = part.split("\n")[0].strip()
     except Exception:
         pass
     
@@ -356,10 +415,15 @@ async def handle_torrent_selection(update, context):
     # We leverage our existing robust magnet processor 
     await process_magnet_to_torrent(chatid, context, magnet_link)
 
-async def jav_search(query, chatid, context):
-    query = query.replace(" ", "+")
-    URL = f"https://ijavtorrent.com/?searchTerm={query}"
-    status_msg = await context.bot.send_message(chat_id=chatid, text=f"Searching for '{query}' on iJavTorrent...")
+async def jav_search(query, chatid, context, page=1):
+    original_query = query.strip()
+    encoded_query = original_query.replace(" ", "+")
+    URL = f"https://ijavtorrent.com/?searchTerm={encoded_query}"
+
+    status_text = f"Searching for '{original_query}' on iJavTorrent..."
+    if page > 1:
+        status_text += f" (Page {page})"
+    status_msg = await context.bot.send_message(chat_id=chatid, text=status_text)
 
     try:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}, verify=False) as client:
@@ -371,105 +435,127 @@ async def jav_search(query, chatid, context):
                 await context.bot.edit_message_text(chat_id=chatid, message_id=status_msg.message_id, text=f"No JAV results found for '{query}'.")
                 return
 
-            text_lines = [f"🔞 <b>JAV Search Results for '{query}':</b>\n"]
-            keyboard_row = []
-            cover_url = None
-            
-            # Extract cover for the first result to "WOW" the user
-            first_vid = video_items[0]
-            img_tag = first_vid.find('img')
-            if img_tag:
-                cover_url = img_tag.get('src')
-                if cover_url and not cover_url.startswith('http'):
-                    cover_url = "https://ijavtorrent.com" + cover_url
-
-            count = 0
-
+            valid_results = []
             for vid in video_items:
-                if count >= 5: break
-                
-                # Fallback title from the movie name div
                 movie_name_div = vid.find('div', class_='name')
                 fallback_title = movie_name_div.get_text(strip=True) if movie_name_div else "Unknown JAV"
-                
-                # Each video-item has a table of torrents.
+
+                cover_url = None
+                img_tag = vid.find('img')
+                if img_tag:
+                    cover_url = img_tag.get('data-src') or img_tag.get('src')
+                    if cover_url and not cover_url.startswith('http'):
+                        cover_url = "https://ijavtorrent.com" + cover_url
+
                 torrent_table = vid.find('table', class_='table-sm')
-                if not torrent_table: continue
-                
-                torrent_row = torrent_table.find('tr')
-                if not torrent_row: continue
-                
-                dl_tag = torrent_row.find('a', class_='download-click-track')
-                magnet_tag = torrent_row.find('a', class_='magnet-click-track')
-                
-                if not dl_tag: continue
-                
-                dl_href = dl_tag.get('href', '')
-                dl_id = dl_href.split('/')[-1] if '/' in dl_href else ""
-                if not dl_id: continue
-                
-                # We still extract info_hash if magnet is available for fallback, 
-                # but we prioritize dl_id for direct download.
-                info_hash = ""
-                if magnet_tag:
-                    magnet = magnet_tag.get('href', '').replace('&amp;', '&')
-                    hash_match = re.search(r'xt=urn:btih:([a-zA-Z0-9]+)', magnet, re.IGNORECASE)
-                    if hash_match:
-                        info_hash = hash_match.group(1).upper()
+                if not torrent_table:
+                    continue
 
-                
-                # Extract title from 'dn' param in magnet or fallback
-                title = fallback_title
-                if magnet_tag:
-                    magnet = magnet_tag.get('href', '').replace('&amp;', '&')
-                    query_str = magnet.split('?', 1)[1] if '?' in magnet else ""
-                    query_params = urllib.parse.parse_qs(query_str)
-                    if 'dn' in query_params:
-                        title = urllib.parse.unquote(query_params['dn'][0])
+                # Some cards render an empty table or a header-only row; use the first row that has a download link.
+                torrent_rows = torrent_table.find_all('tr')
+                for torrent_row in torrent_rows:
+                    dl_tag = torrent_row.find('a', class_='download-click-track')
+                    if not dl_tag:
+                        continue
 
-                
-                # Extract metadata from table cells
-                metadata = ""
-                tds = torrent_row.find_all('td')
-                if len(tds) >= 3:
-                    size = tds[1].get_text(strip=True)
-                    seeds = tds[2].get_text(strip=True).replace('S:', '').strip()
-                    metadata = f"   💾 {size} 🟢 Seeders: {seeds}"
-                
-                count += 1
+                    magnet_tag = torrent_row.find('a', class_='magnet-click-track')
+                    dl_href = dl_tag.get('href', '')
+                    dl_id = dl_href.split('/')[-1] if '/' in dl_href else ""
+                    if not dl_id:
+                        continue
+
+                    info_hash = ""
+                    title = fallback_title
+                    if magnet_tag:
+                        magnet = magnet_tag.get('href', '').replace('&amp;', '&')
+                        hash_match = re.search(r'xt=urn:btih:([a-zA-Z0-9]+)', magnet, re.IGNORECASE)
+                        if hash_match:
+                            info_hash = hash_match.group(1).upper()
+
+                        query_str = magnet.split('?', 1)[1] if '?' in magnet else ""
+                        query_params = urllib.parse.parse_qs(query_str)
+                        if 'dn' in query_params:
+                            title = urllib.parse.unquote(query_params['dn'][0])
+
+                    metadata = ""
+                    tds = torrent_row.find_all('td')
+                    if len(tds) >= 3:
+                        size = tds[1].get_text(strip=True)
+                        seeds = tds[2].get_text(strip=True).replace('S:', '').strip()
+                        metadata = f"   💾 {size} 🟢 Seeders: {seeds}"
+
+                    valid_results.append({
+                        "title": title,
+                        "dl_id": dl_id,
+                        "info_hash": info_hash,
+                        "metadata": metadata,
+                        "cover_url": cover_url,
+                    })
+                    break
+
+            if not valid_results:
+                await context.bot.edit_message_text(chat_id=chatid, message_id=status_msg.message_id, text=f"No valid torrent links found for '{original_query}'.")
+                return
+
+            results_per_page = 5
+            start_idx = (page - 1) * results_per_page
+            end_idx = start_idx + results_per_page
+            page_results = valid_results[start_idx:end_idx]
+
+            if not page_results and page > 1:
+                await context.bot.edit_message_text(chat_id=chatid, message_id=status_msg.message_id, text="No more JAV results found.")
+                return
+
+            text_lines = [f"🔞 <b>JAV Search Results for '{original_query}' (Page {page}):</b>\n"]
+            keyboard_row = []
+            page_cover = page_results[0].get("cover_url") if page_results else None
+
+            for count, item in enumerate(page_results, start=1):
+                title = item["title"]
+                dl_id = item["dl_id"]
+                info_hash = item["info_hash"]
+                metadata = item["metadata"]
+
                 text_lines.append(f"{count}. <b>{html.escape(title)}</b>")
                 if metadata:
                     text_lines.append(f"{metadata}\n")
                 else:
                     text_lines.append("\n")
-                
-                # Truncate title to keep callback_data under 64 bytes
+
                 short_title = (title[:20] + "..") if len(title) > 20 else title
-                
-                # We offer both direct download and magnet fallback
                 keyboard_row.append(telegram.InlineKeyboardButton(f"DL {count}", callback_data=f"ijavdl_{count}_{dl_id}_{short_title}"))
                 if info_hash:
-                    # Use existing hash_ prefix but we need to pass enough info for handle_torrent_selection
                     keyboard_row.append(telegram.InlineKeyboardButton(f"🧲 {count}", callback_data=f"hash_{count}_{info_hash}"))
 
+            pagination_row = []
+            if page > 1:
+                pagination_row.append(telegram.InlineKeyboardButton("⬅️ Prev", callback_data=f"jpage_{page-1}_{original_query}"))
+            if len(valid_results) > end_idx:
+                pagination_row.append(telegram.InlineKeyboardButton("Next ➡️", callback_data=f"jpage_{page+1}_{original_query}"))
 
+            keyboard = [keyboard_row]
+            if pagination_row:
+                keyboard.append(pagination_row)
 
-            if count == 0:
-                await context.bot.edit_message_text(chat_id=chatid, message_id=status_msg.message_id, text=f"No valid magnet links found for '{query}'.")
-                return
-
-            reply_markup = telegram.InlineKeyboardMarkup([keyboard_row])
+            reply_markup = telegram.InlineKeyboardMarkup(keyboard)
             final_text = "\n".join(text_lines)
             
-            if cover_url:
-                await context.bot.send_photo(
-                    chat_id=chatid,
-                    photo=cover_url,
-                    caption=final_text,
-                    reply_markup=reply_markup,
-                    parse_mode=telegram.constants.ParseMode.HTML
-                )
-            else:
+            sent_with_photo = False
+            if page_cover:
+                try:
+                    await context.bot.send_photo(
+                        chat_id=chatid,
+                        photo=page_cover,
+                        caption=final_text,
+                        reply_markup=reply_markup,
+                        parse_mode=telegram.constants.ParseMode.HTML
+                    )
+                    sent_with_photo = True
+                except Exception as photo_err:
+                    # Some remote image URLs are blocked or not image content for Telegram.
+                    print(f"JAV cover send failed, falling back to text: {photo_err}")
+
+            if not sent_with_photo:
                 await context.bot.send_message(
                     chat_id=chatid,
                     text=final_text,
@@ -486,8 +572,13 @@ async def jav_search(query, chatid, context):
 
 async def handle_ijav_download(update, context):
     query = update.callback_query
+    if not query:
+        return
     await query.answer()
     
+    if not query.message:
+        return
+
     # Expected format: ijavdl_{idx}_{id}_{title}
     data_parts = query.data.split("_")
     if len(data_parts) < 4:
