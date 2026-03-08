@@ -39,7 +39,7 @@ async def top_movies(chatid, context):
     update1 = await context.bot.send_message(chat_id=chatid, text="Please wait..Fetching data from APIBay")
     
     try:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}, verify=False) as client:
             response = await client.get(URL)
             all_data = response.json()
             
@@ -87,7 +87,7 @@ async def popular_apps(chatid, context):
     update1 = await context.bot.send_message(chat_id=chatid, text="Please wait..Fetching data from APIBay")
     
     try:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}, verify=False) as client:
             response = await client.get(URL)
             all_data = response.json()
             
@@ -133,7 +133,7 @@ async def now_playing(chatid, context):
     final_data = []
     url = movies_api()
     try:
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}, verify=False) as client:
             response1 = await client.get(url)
             data1 = response1.json()
             movies = data1["results"]
@@ -184,7 +184,7 @@ async def load_more(chatid, context):
     final_data = []
     check = movies_api()
     try:
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}, verify=False) as client:
             response1 = await client.get(check)
             data1 = response1.json()
             page = data1["total_pages"]
@@ -221,7 +221,7 @@ async def search_engine(user_message, chatid, context):
     update1 = await context.bot.send_message(chat_id=chatid, text=f"Please wait..Searching for '{user_message}' on APIBay")
 
     try:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}, verify=False) as client:
             response = await client.get(URL)
             data = response.json()
 
@@ -286,11 +286,10 @@ async def process_magnet_to_torrent(chatid, context, magnet_link):
         if not safe_title: safe_title = "download"
         file_path = f"./{safe_title}.torrent"
         
-        # Fetch the .torrent file from itorrents using Codetabs proxy to bypass ISP blocks
         target_url = f"https://itorrents.org/torrent/{info_hash}.torrent"
         proxy_url = f"https://api.codetabs.com/v1/proxy?quest={target_url}"
         
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}, verify=False) as client:
             response = await client.get(proxy_url)
             
             # Verify the response is an actual valid Bencoded torrent file, not an HTML error or Cloudflare captcha
