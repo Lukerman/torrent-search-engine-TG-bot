@@ -1,212 +1,491 @@
-from configs.url_shit import my_bot, scrap_master, movies_api
+from configs.url_shit import pirat_api, movies_api
 from configs.blah_blah import welcome
 from handlers.letme_handle import listToString
 from bs4 import BeautifulSoup
 import requests
 import telegram
-import telegram.bot
 import json
 import random
+import httpx # Added for async requests
+import urllib.parse
+import asyncio
+import os
+import re
+import httpx
+import html
+import html as html_lib
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
 
+def format_size(size_bytes):
+    try:
+        size_bytes = int(size_bytes)
+        if size_bytes == 0: return "0 B"
+        suffixes = ["B", "KB", "MB", "GB", "TB", "PB"]
+        i = 0
+        while size_bytes >= 1024 and i < len(suffixes) - 1:
+            size_bytes /= 1024.0
+            i += 1
+        return f"{size_bytes:.2f} {suffixes[i]}"
+    except Exception:
+        return f"{size_bytes} B"
 
-def start(chatid):
+async def start(chatid, context):
     
-    welcome(chatid)
+    await welcome(chatid, context)
 
 
-def top_movies(chatid, context):
-    results, result_links, name, fname, size = [], [], [], [], []
-    page = requests.get(f"{scrap_master()}popular-movies")
-    soup = BeautifulSoup(page.content, 'html.parser')
-    update1 = my_bot().send_message(chatid, "Please wait..Fetching data")
-    for div in soup.find_all("div", {"class": "table-list-wrap"}):
-        for div1 in div.find_all("a", {"class": None}):
-            if div1.has_attr('href'):
-                results.append(div1["href"])
-    subs = "torrent"
-    res = [i for i in results if subs in i]
+async def top_movies(chatid, context):
+    URL = f"{pirat_api()}q.php?q=top100:0" # Use global top 100
+    update1 = await context.bot.send_message(chat_id=chatid, text="Please wait..Fetching data from APIBay")
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+            response = await client.get(URL)
+            all_data = response.json()
+            
+            # Filter for Movie categories: 201 (Movies), 202 (DVDR), 207 (HD), 208 (UltraHD)
+            data = [i for i in all_data if i.get('category') in ['201', '202', '207', '208']]
 
-    for query in res:
-        URL1 = f"{scrap_master()}{query}"
-        page = requests.get(URL1)
-        soup = BeautifulSoup(page.content, 'html.parser')
-        for div in soup.find_all("div", {"class": "l30719a994ed675b3e5543484a83d6141b0edb709 clearfix"}):
-            for div1 in div.find_all("a", {"onclick": "javascript: void(0);"}):
-                if div1.has_attr('href'):
-                    result_links.append(div1["href"])
-        for div in soup.find("strong", text="Total size").next_sibling:
-            convert = str(div)
-            size.append(convert)
-    subs = "magnet"
-    res1 = [i for i in result_links if subs in i]
-    my_bot().edit_message_text(
-        chat_id=chatid, message_id=update1["message_id"], text="queueing data")
+            if not data:
+                await context.bot.edit_message_text(chat_id=chatid, message_id=update1.message_id, text="No top movies found currently on APIBay.")
+                return
 
-    page = requests.get(f"{scrap_master()}popular-movies")
-    soup = BeautifulSoup(page.content, 'html.parser')
-    for div in soup.find_all("div", {"class": "table-list-wrap"}):
-        for div1 in div.find_all("a", {"class": None}):
-            if div1.has_attr('href'):
-                name.append(div1.text)
-    res2 = [i for i in range(len(name)) if i % 2 == 0]
-    my_bot().edit_message_text(
-        chat_id=chatid, message_id=update1["message_id"], text="pushing data......")
-    for odd in res2:
-        fname.append(name[odd])
-    for (fname, res1, size) in zip(fname, res1, size):
-        context.bot.send_message(chat_id=chatid, text="Title:"+"<u>"+fname+"</u>"+"\n\n" +
-                                 "<b>LINK:</b>"+"\n\n"+"<code>"+res1+"</code>"+"\n\n"+"size:"+size, parse_mode=telegram.ParseMode.HTML)
-    context.bot.send_message(chat_id=chatid, text="Feedbacks are welcomed. Contact Admin\n @aravind_at_telegram",
-                             parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=True)
-
-
-def popular_apps(chatid, context):
-    results, result_links, name, fname, size = [], [], [], [], []
-    URL = f"{scrap_master()}popular-apps"
-    update1 = my_bot().send_message(chatid, "Please wait..Fetching data")
-    page = requests.get(URL)
-    soup = BeautifulSoup(page.content, 'html.parser')
-    for div in soup.find_all("div", {"class": "table-list-wrap"}):
-        for div1 in div.find_all("a", {"class": None}):
-            if div1.has_attr('href'):
-                results.append(div1["href"])
-    subs = "torrent"
-    res = [i for i in results if subs in i]
-    my_bot().edit_message_text(
-        chat_id=chatid, message_id=update1["message_id"], text="queueing data")
-
-    for query in res:
-        URL1 = f"{scrap_master()}{query}"
-        page = requests.get(URL1)
-        soup = BeautifulSoup(page.content, 'html.parser')
-        for div in soup.find_all("div", {"class": "l30719a994ed675b3e5543484a83d6141b0edb709 clearfix"}):
-            for div1 in div.find_all("a", {"onclick": "javascript: void(0);"}):
-                if div1.has_attr('href'):
-                    result_links.append(div1["href"])
-        for div in soup.find("strong", text="Total size").next_sibling:
-            convert = str(div)
-            size.append(convert)
-    subs = "magnet"
-    res1 = [i for i in result_links if subs in i]
-    my_bot().edit_message_text(
-        chat_id=chatid, message_id=update1["message_id"], text="pushing data......")
-
-    page = requests.get(URL)
-    soup = BeautifulSoup(page.content, 'html.parser')
-    for div in soup.find_all("div", {"class": "table-list-wrap"}):
-        for div1 in div.find_all("a", {"class": None}):
-            if div1.has_attr('href'):
-                name.append(div1.text)
-    res2 = [i for i in range(len(name)) if i % 2 == 0]
-    for odd in res2:
-        fname.append(name[odd])
-
-    for (fname, res1, size) in zip(fname, res1, size):
-        context.bot.send_message(chat_id=chatid, text="Title:"+"<u>"+fname+"</u>"+"\n\n" +
-                                 "<b>LINK:</b>"+"\n\n"+"<code>"+res1+"</code>"+"\n"+"size:"+size, parse_mode=telegram.ParseMode.HTML)
-    context.bot.send_message(chat_id=chatid, text="Feedbacks are welcomed. Contact Admin\n @aravind_at_telegram",
-                             parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=True)
+            await context.bot.edit_message_text(chat_id=chatid, message_id=update1.message_id, text="pushing data......")
+            
+            text_lines = ["🍿 <b>Top 5 Movies:</b>\n"]
+            keyboard_row = []
+            
+            for idx, item in enumerate(data[:5], start=1): # LIMIT TO TOP 5
+                title = item.get("name", "Unknown Title")
+                info_hash = item.get("info_hash", "")
+                size_str = format_size(item.get("size", "0"))
+                seeders = item.get("seeders", "N/A")
+                
+                text_lines.append(f"{idx}. <b>{title}</b>")
+                text_lines.append(f"   💾 {size_str} 🟢 Seeders: {seeders}\n")
+                
+                keyboard_row.append(telegram.InlineKeyboardButton(str(idx), callback_data=f"hash_{idx}_{info_hash}"))
+                
+            reply_markup = telegram.InlineKeyboardMarkup([keyboard_row])
+            final_text = "\n".join(text_lines)
+            
+            await context.bot.send_message(
+                chat_id=chatid, 
+                text=final_text, 
+                reply_markup=reply_markup,
+                parse_mode=telegram.constants.ParseMode.HTML
+            )
+            
+            await context.bot.delete_message(chat_id=chatid, message_id=update1.message_id) 
+            
+    except Exception as e:
+        await context.bot.edit_message_text(chat_id=chatid, message_id=update1.message_id, text=f"Error fetching data: {str(e)[:100]}")
 
 
-def now_playing(chatid):
+async def popular_apps(chatid, context):
+    URL = f"{pirat_api()}q.php?q=top100:0" # Use global top 100
+    update1 = await context.bot.send_message(chat_id=chatid, text="Please wait..Fetching data from APIBay")
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+            response = await client.get(URL)
+            all_data = response.json()
+            
+            # Filter for Application categories: 301 (Windows), 302 (Mac), 303 (Linux)
+            data = [i for i in all_data if i.get('category') in ['301', '302', '303']]
+
+            if not data:
+                await context.bot.edit_message_text(chat_id=chatid, message_id=update1.message_id, text="No popular apps found currently on APIBay.")
+                return
+
+            text_lines = ["📱 <b>Top 5 Popular Apps:</b>\n"]
+            keyboard_row = []
+            
+            for idx, item in enumerate(data[:5], start=1): # LIMIT TO TOP 5
+                title = item.get("name", "Unknown Title")
+                info_hash = item.get("info_hash", "")
+                size_str = format_size(item.get("size", "0"))
+                seeders = item.get("seeders", "N/A")
+                
+                text_lines.append(f"{idx}. <b>{title}</b>")
+                text_lines.append(f"   💾 {size_str} 🟢 Seeders: {seeders}\n")
+                
+                keyboard_row.append(telegram.InlineKeyboardButton(str(idx), callback_data=f"hash_{idx}_{info_hash}"))
+                
+            reply_markup = telegram.InlineKeyboardMarkup([keyboard_row])
+            final_text = "\n".join(text_lines)
+            
+            await context.bot.send_message(
+                chat_id=chatid, 
+                text=final_text, 
+                reply_markup=reply_markup,
+                parse_mode=telegram.constants.ParseMode.HTML
+            )
+            
+            await context.bot.delete_message(chat_id=chatid, message_id=update1.message_id) 
+            
+    except Exception as e:
+        await context.bot.edit_message_text(chat_id=chatid, message_id=update1.message_id, text=f"Error fetching data: {str(e)[:100]}")
+
+
+async def now_playing(chatid, context):
     movies_all = {}
     final_data = []
     url = movies_api()
-    response1 = requests.request("GET", url)
-    data1 = json.loads(response1.text)
-    movies = data1["results"]
-    for movie in movies:
-        movies_under = movie["title"].replace(" ", "_")
-        movies_all["title"] = "/"+movies_under
-        movies_all["release_date"] = movie["release_date"]
-        send_data = json.dumps(movies_all).strip(
-            '{}').replace(',', '\n').replace('"', '')
-        final_data.append(send_data+"\n\n")
-    final_str = listToString(final_data)
-    my_bot().send_message(chatid, text="Click a movie name to copy. Paste and get torrent links." +
-                        "\n\n"+final_str, parse_mode=telegram.ParseMode.HTML)
-    my_bot().send_message(chatid, 'show more movies?\n\n'+"/load_more")
+    try:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+            response1 = await client.get(url)
+            data1 = response1.json()
+            if "results" not in data1:
+                await context.bot.send_message(chat_id=chatid, text="Error: TMDB API did not return any results.")
+                return
+
+            movies = data1["results"]
+            for movie in movies:
+                safe_title = html.escape(movie["title"])
+                movies_under = safe_title.replace(" ", "_")
+                movies_all["title"] = "/"+movies_under
+                movies_all["release_date"] = movie.get("release_date", "N/A")
+                send_data = json.dumps(movies_all).strip(
+                    '{}').replace(',', '\n').replace('"', '')
+                final_data.append(send_data+"\n\n")
+            final_str = listToString(final_data)
+            await context.bot.send_message(chat_id=chatid, text="Click a movie name to copy. Paste and get torrent links." +
+                                "\n\n"+final_str, parse_mode=telegram.constants.ParseMode.HTML)
+            await context.bot.send_message(chat_id=chatid, text='show more movies?\n\n'+"/load_more")
+    except Exception as e:
+        import traceback
+        print(f"DEBUG Now Playing Error: {traceback.format_exc()}")
+        await context.bot.send_message(chat_id=chatid, text=f"Error fetching movies: {str(e)[:100]}")
 
 
-def load_more(chatid):
+async def load_more(chatid, context):
     movies_all = {}
     final_data = []
     check = movies_api()
-    response1 = requests.request("GET", check)
-    data1 = json.loads(response1.text)
-    page = data1["total_pages"]
-    search = random.randint(0, page)
-    url = "https://api.themoviedb.org/3/movie/now_playing?api_key=cc348043650d1146104248ee9c810fa6&language=en-US&page=" + \
-        str(search)
-    response1 = requests.request("GET", url)
-    data1 = json.loads(response1.text)
-    movies = data1["results"]
-    for movie in movies:
-        movies_under = movie["title"].replace(" ", "_")
-        movies_all["title"] = "/"+movies_under
-        movies_all["release_date"] = movie["release_date"]
-        send_data = json.dumps(movies_all).strip(
-            '{}').replace(',', '\n').replace('"', '')
-        final_data.append(send_data+"\n\n")
-    final_str = listToString(final_data)
-    my_bot().send_message(chatid, text="Click a movie name to get torrent links." +
-                        "\n\n"+final_str, parse_mode=telegram.ParseMode.HTML)
-    my_bot().send_message(chatid, 'show more movies?\n\n'+"/load_more")
+    try:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+            response1 = await client.get(check)
+            data1 = response1.json()
+            page = data1["total_pages"]
+            search = random.randint(1, page)
+            url = f"https://api.themoviedb.org/3/movie/now_playing?api_key=cc348043650d1146104248ee9c810fa6&language=en-US&page={search}"
+            response1 = await client.get(url)
+            data1 = response1.json()
+            if "results" not in data1:
+                await context.bot.send_message(chat_id=chatid, text="Error: TMDB API did not return any results.")
+                return
+
+            movies = data1["results"]
+            for movie in movies:
+                safe_title = html.escape(movie["title"])
+                movies_under = safe_title.replace(" ", "_")
+                movies_all["title"] = "/"+movies_under
+                movies_all["release_date"] = movie.get("release_date", "N/A")
+                send_data = json.dumps(movies_all).strip(
+                    '{}').replace(',', '\n').replace('"', '')
+                final_data.append(send_data+"\n\n")
+            final_str = listToString(final_data)
+            await context.bot.send_message(chat_id=chatid, text="Click a movie name to get torrent links." +
+                                "\n\n"+final_str, parse_mode=telegram.constants.ParseMode.HTML)
+            await context.bot.send_message(chat_id=chatid, text='show more movies?\n\n'+"/load_more")
+    except Exception as e:
+        import traceback
+        print(f"DEBUG Load More Error: {traceback.format_exc()}")
+        await context.bot.send_message(chat_id=chatid, text=f"Error fetching movies: {str(e)[:100]}")
 
 
-def search_engine(user_message,chatid, context):
+async def search_engine(user_message, chatid, context):
     user_message = user_message.replace("_", " ").replace("/", "")
-    URL = f'{scrap_master()}/search/'+user_message+'/1/'
-    results, result_links, name, fname, seeders, size = [], [], [], [], [], []
-    page = requests.get(URL)
-    soup = BeautifulSoup(page.content, 'html.parser')
-    update1 = my_bot().send_message(chatid, "Please wait..Fetching data")
+    URL = f"{pirat_api()}q.php?q={urllib.parse.quote(user_message)}"
+    update1 = await context.bot.send_message(chat_id=chatid, text=f"Please wait..Searching for '{user_message}' on APIBay")
 
-    for div in soup.find_all("div", {"class": "table-list-wrap"}):
-        for div1 in div.find_all("a", {"class": None}):
-            if div1.has_attr('href'):
-                results.append(div1["href"])
-    subs = "torrent"
-    res = [i for i in results if subs in i]
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+            response = await client.get(URL)
+            data = response.json()
 
-    for query in res:
-        URL1 = "https://www.1377x.to/"+query
-        page = requests.get(URL1)
-        soup = BeautifulSoup(page.content, 'html.parser')
-        for div in soup.find_all("div", {"class": "l30719a994ed675b3e5543484a83d6141b0edb709 clearfix"}):
-            for div1 in div.find_all("a", {"onclick": "javascript: void(0);"}):
-                if div1.has_attr('href'):
-                    result_links.append(div1["href"])
-            for div in soup.find_all("span", {"class": "seeds"}):
-                convert = str(div)
-                convert = (convert[20:])
-                seed = convert[:-7]
-                seeders.append(seed)
-            for div in soup.find("strong", text="Total size").next_sibling:
-                convert = str(div)
-                size.append(convert)
-    my_bot().edit_message_text(
-        chat_id=chatid, message_id=update1["message_id"], text="pushing data......")
+            if not data or (len(data) == 1 and data[0].get('id') == '0'):
+                # Deleting the APIBay specific status before switching to JAV search
+                await context.bot.delete_message(chat_id=chatid, message_id=update1.message_id)
+                await jav_search(user_message, chatid, context)
+                return
 
-    subs = "magnet"
-    res1 = [i for i in result_links if subs in i]
+            text_lines = [f"🔍 <b>Search Results for '{user_message}':</b>\n"]
+            keyboard_row = []
+            
+            for idx, item in enumerate(data[:5], start=1): # LIMIT TO TOP 5 search results
+                title = item.get("name", "Unknown Title")
+                info_hash = item.get("info_hash", "")
+                size_str = format_size(item.get("size", "0"))
+                seeders = item.get("seeders", "N/A")
+                
+                text_lines.append(f"{idx}. <b>{title}</b>")
+                text_lines.append(f"   💾 {size_str} 🟢 Seeders: {seeders}\n")
+                keyboard_row.append(telegram.InlineKeyboardButton(str(idx), callback_data=f"hash_{idx}_{info_hash}"))
+                
+            reply_markup = telegram.InlineKeyboardMarkup([keyboard_row])
+            final_text = "\n".join(text_lines)
+            
+            await context.bot.send_message(
+                chat_id=chatid,
+                text=final_text,
+                reply_markup=reply_markup,
+                parse_mode=telegram.constants.ParseMode.HTML
+            )
+            
+            await context.bot.delete_message(chat_id=chatid, message_id=update1.message_id) 
 
-    page = requests.get(URL)
-    soup = BeautifulSoup(page.content, 'html.parser')
-    for div in soup.find_all("div", {"class": "table-list-wrap"}):
-        for div1 in div.find_all("a", {"class": None}):
-            if div1.has_attr('href'):
-                name.append(div1.text)
-    res2 = [i for i in range(len(name)) if i % 2 == 0]
-    for odd in res2:
-        fname.append(name[odd])
+    except Exception as e:
+        await context.bot.edit_message_text(chat_id=chatid, message_id=update1.message_id, text=f"Error fetching data: {str(e)[:100]}")
 
-    if(len(seeders) != 0):
-        for (fname, res1, seeders, size) in zip(fname, res1, seeders, size):
-            context.bot.send_message(chat_id=chatid, text="title:"+"<b>"+fname+"</b>"+"\n"+"seeders:"+"<b>" +
-                                     seeders+"</b>"+"\n"+"links:"+"<code>"+res1+"</code>"+"\n"+"\n"+"size:"+size, parse_mode=telegram.ParseMode.HTML)
-        context.bot.send_message(chat_id=chatid, text="Feedbacks are welcomed. Contact Admin\n @aravind_at_telegram",
-                                 parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=True)
-    else:
-        context.bot.send_message(
-            chat_id=chatid, text="Oops!!. no data found ☹️. Please check the spelling")
+async def process_magnet_to_torrent(chatid, context, magnet_link):
+    status_msg = await context.bot.send_message(chat_id=chatid, text="Fetching torrent metadata via API Proxy, please wait...")
+    
+    try:
+        # Extract the info_hash using regex
+        match = re.search(r'xt=urn:btih:([a-zA-Z0-9]+)', magnet_link, re.IGNORECASE)
+        if not match:
+            await context.bot.edit_message_text(
+                chat_id=chatid, 
+                message_id=status_msg.message_id, 
+                text="Invalid Magnet Link provided."
+            )
+            return
+            
+        info_hash = match.group(1).upper()
+        
+        # Extract filename (dn parameter)
+        title = "download"
+        parsed_url = urllib.parse.urlparse(magnet_link)
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+        if 'dn' in query_params:
+            title = urllib.parse.unquote(query_params['dn'][0])
+            
+        safe_title = "".join([c for c in title if c.isalpha() or c.isdigit() or c in (' ', '_', '-')]).rstrip()
+        if not safe_title: safe_title = "download"
+        file_path = f"./{safe_title}.torrent"
+        
+        # Fetch the .torrent file from itorrents using Codetabs proxy to bypass ISP blocks
+        target_url = f"https://itorrents.org/torrent/{info_hash}.torrent"
+        proxy_url = f"https://api.codetabs.com/v1/proxy?quest={target_url}"
+        
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+            response = await client.get(proxy_url)
+            
+            # Verify the response is an actual valid Bencoded torrent file, not an HTML error or Cloudflare captcha
+            if response.status_code != 200 or not response.content or not response.content.startswith(b'd8:'):
+                await context.bot.edit_message_text(
+                    chat_id=chatid, 
+                    message_id=status_msg.message_id, 
+                    text="Unable to fetch torrent metadata. The magnet may be inactive or currently un-cached."
+                )
+                return
+                
+            # Save bytes to disk
+            with open(file_path, 'wb') as f:
+                f.write(response.content)
+                
+        # Send document back to Telegram user
+        with open(file_path, 'rb') as f:
+            await context.bot.send_document(chat_id=chatid, document=f)
+            
+        await context.bot.delete_message(chat_id=chatid, message_id=status_msg.message_id)
+        
+        # Clean up
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            
+    except Exception as e:
+        await context.bot.edit_message_text(
+            chat_id=chatid, 
+            message_id=status_msg.message_id, 
+            text=f"Error generating torrent link: {str(e)[:100]}"
+        )
+
+async def handle_torrent_selection(update, context):
+    query = update.callback_query
+    await query.answer()
+    
+    # Expected format: hash_{idx}_{info_hash}
+    data_parts = query.data.split("_")
+    if len(data_parts) < 3:
+        return
+        
+    idx = data_parts[1]
+    info_hash = data_parts[2]
+    
+    title = "download"
+    try:
+        # Extract title from the message text block
+        if query.message and query.message.text:
+            text = query.message.text
+            part = text.split(f"{idx}. ")[1]
+            title = part.split("\n")[0].strip()
+    except Exception:
+        pass
+    
+    chatid = query.message.chat_id
+    magnet_link = f"magnet:?xt=urn:btih:{info_hash}&dn={urllib.parse.quote(title)}"
+    
+    # We leverage our existing robust magnet processor 
+    await process_magnet_to_torrent(chatid, context, magnet_link)
+
+async def jav_search(query, chatid, context):
+    query = query.replace(" ", "+")
+    URL = f"https://ijavtorrent.com/?searchTerm={query}"
+    status_msg = await context.bot.send_message(chat_id=chatid, text=f"Searching for '{query}' on iJavTorrent...")
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}, verify=False) as client:
+            response = await client.get(URL)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            video_items = soup.find_all('div', class_='video-item')
+            if not video_items:
+                await context.bot.edit_message_text(chat_id=chatid, message_id=status_msg.message_id, text=f"No JAV results found for '{query}'.")
+                return
+
+            text_lines = [f"🔞 <b>JAV Search Results for '{query}':</b>\n"]
+            keyboard_row = []
+            
+            count = 0
+            for vid in video_items:
+                if count >= 5: break
+                
+                # Fallback title from the movie name div
+                movie_name_div = vid.find('div', class_='name')
+                fallback_title = movie_name_div.get_text(strip=True) if movie_name_div else "Unknown JAV"
+                
+                # Each video-item has a table of torrents.
+                torrent_table = vid.find('table', class_='table-sm')
+                if not torrent_table: continue
+                
+                torrent_row = torrent_table.find('tr')
+                if not torrent_row: continue
+                
+                dl_tag = torrent_row.find('a', class_='download-click-track')
+                magnet_tag = torrent_row.find('a', class_='magnet-click-track')
+                
+                if not dl_tag: continue
+                
+                dl_href = dl_tag.get('href', '')
+                dl_id = dl_href.split('/')[-1] if '/' in dl_href else ""
+                if not dl_id: continue
+                
+                # We still extract info_hash if magnet is available for fallback, 
+                # but we prioritize dl_id for direct download.
+                info_hash = ""
+                if magnet_tag:
+                    magnet = magnet_tag.get('href', '').replace('&amp;', '&')
+                    hash_match = re.search(r'xt=urn:btih:([a-zA-Z0-9]+)', magnet, re.IGNORECASE)
+                    if hash_match:
+                        info_hash = hash_match.group(1).upper()
+
+                
+                # Extract title from 'dn' param in magnet or fallback
+                title = fallback_title
+                if magnet_tag:
+                    magnet = magnet_tag.get('href', '').replace('&amp;', '&')
+                    query_str = magnet.split('?', 1)[1] if '?' in magnet else ""
+                    query_params = urllib.parse.parse_qs(query_str)
+                    if 'dn' in query_params:
+                        title = urllib.parse.unquote(query_params['dn'][0])
+
+                
+                # Extract metadata from table cells
+                metadata = ""
+                tds = torrent_row.find_all('td')
+                if len(tds) >= 3:
+                    size = tds[1].get_text(strip=True)
+                    seeds = tds[2].get_text(strip=True).replace('S:', '').strip()
+                    metadata = f"   💾 {size} 🟢 Seeders: {seeds}"
+                
+                count += 1
+                text_lines.append(f"{count}. <b>{html.escape(title)}</b>")
+                if metadata:
+                    text_lines.append(f"{metadata}\n")
+                else:
+                    text_lines.append("\n")
+                
+                # Truncate title to keep callback_data under 64 bytes
+                short_title = (title[:20] + "..") if len(title) > 20 else title
+                
+                # We offer both direct download and magnet fallback
+                keyboard_row.append(telegram.InlineKeyboardButton(f"DL {count}", callback_data=f"ijavdl_{count}_{dl_id}_{short_title}"))
+                if info_hash:
+                    # Use existing hash_ prefix but we need to pass enough info for handle_torrent_selection
+                    keyboard_row.append(telegram.InlineKeyboardButton(f"🧲 {count}", callback_data=f"hash_{count}_{info_hash}"))
+
+
+
+            if count == 0:
+                await context.bot.edit_message_text(chat_id=chatid, message_id=status_msg.message_id, text=f"No valid magnet links found for '{query}'.")
+                return
+
+            reply_markup = telegram.InlineKeyboardMarkup([keyboard_row])
+            final_text = "\n".join(text_lines)
+            
+            await context.bot.send_message(
+                chat_id=chatid,
+                text=final_text,
+                reply_markup=reply_markup,
+                parse_mode=telegram.constants.ParseMode.HTML
+            )
+            await context.bot.delete_message(chat_id=chatid, message_id=status_msg.message_id)
+
+    except Exception as e:
+        import traceback
+        print(f"JAV Search Error: {traceback.format_exc()}")
+        await context.bot.edit_message_text(chat_id=chatid, message_id=status_msg.message_id, text=f"Error searching JAV: {str(e)[:100]}")
+
+async def handle_ijav_download(update, context):
+    query = update.callback_query
+    await query.answer()
+    
+    # Expected format: ijavdl_{idx}_{id}_{title}
+    data_parts = query.data.split("_")
+    if len(data_parts) < 4:
+        return
+        
+    dl_id = data_parts[2]
+    title = data_parts[3]
+    chatid = query.message.chat_id
+    
+    status_msg = await context.bot.send_message(chat_id=chatid, text=f"Downloading '{title}' directly from iJavTorrent, please wait...")
+    
+    try:
+        safe_title = "".join([c for c in title if c.isalpha() or c.isdigit() or c in (' ', '_', '-')]).rstrip()
+        if not safe_title: safe_title = "download"
+        file_path = f"./{safe_title}.torrent"
+        
+        target_url = f"https://ijavtorrent.com/download/{dl_id}"
+        proxy_url = f"https://api.codetabs.com/v1/proxy?quest={target_url}"
+        
+        async with httpx.AsyncClient(timeout=40.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+            response = await client.get(proxy_url)
+            
+            if response.status_code != 200 or not response.content or not response.content.startswith(b'd8:'):
+                await context.bot.edit_message_text(
+                    chat_id=chatid, 
+                    message_id=status_msg.message_id, 
+                    text="Unable to download the torrent file directly. It might be currently unavailable."
+                )
+                return
+                
+            with open(file_path, 'wb') as f:
+                f.write(response.content)
+                
+        with open(file_path, 'rb') as f:
+            await context.bot.send_document(chat_id=chatid, document=f)
+            
+        await context.bot.delete_message(chat_id=chatid, message_id=status_msg.message_id)
+        if os.path.exists(file_path): os.remove(file_path)
+            
+    except Exception as e:
+        await context.bot.edit_message_text(
+            chat_id=chatid, 
+            message_id=status_msg.message_id, 
+            text=f"Error downloading torrent: {str(e)[:100]}"
+        )
+

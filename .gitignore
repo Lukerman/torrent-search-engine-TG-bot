@@ -1,3 +1,30 @@
-
+# Python
+__pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
 
+# Project specific
+configs/url_shit.py
+test.torrent
+test_jav.torrent
+tmp_diag.py
+
+# OS
+.DS_Store
+Thumbs.db
