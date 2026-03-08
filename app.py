@@ -12,22 +12,8 @@ async def reply(update, context):
     
     if user_message == "/start":
         await start(chatid, context)
-    elif user_message == "Top movies":
-        await top_movies(chatid, context)
-    elif user_message == "Top apps":
-        await popular_apps(chatid, context)
-    elif user_message == "now playing movies":
-        await now_playing(chatid, context)
     elif user_message == "/load_more":
         await load_more(chatid, context)
-    elif user_message == "Read me":
-        await read_me(chatid, context)
-    elif user_message == "Privacy Policy":
-        await privacy(chatid, context)
-    elif user_message == "Terms":
-        await terms(chatid, context)
-    elif user_message == "JAV Search":
-        await context.bot.send_message(chat_id=chatid, text="Please send the movie code or search term (e.g., Ipzz) for JAV search.")
     elif re.match(r'^/jav($|\s+)', user_message, re.IGNORECASE):
         query = re.sub(r'^/jav\s*', '', user_message, flags=re.IGNORECASE).strip()
         if not query:

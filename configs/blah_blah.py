@@ -1,12 +1,10 @@
 import telegram
-from telegram import ReplyKeyboardMarkup
+from telegram import ReplyKeyboardRemove
 
 async def welcome(chatid, context):
-    welcome_text = "Hi! What data do you want? type in for a search or choose from the below keyboard buttons."
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[['Read me'], [
-                                 'now playing movies'], ['Top movies', "Top apps"], ["JAV Search"], ["Privacy Policy", "Terms"]])
+    welcome_text = "Hi! What data do you want? type in for a search (e.g., 'Batman' or a JAV code like 'Ipzz-198')."
     await context.bot.send_message(chat_id=chatid, text=welcome_text,
-                        reply_markup=markup)
+                        reply_markup=ReplyKeyboardRemove())
 
 async def read_me(chatid, context):
     readme_text = '''Welcome to Torrent Bot. Here are some clarifications\n\n
