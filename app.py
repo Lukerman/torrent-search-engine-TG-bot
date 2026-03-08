@@ -12,6 +12,12 @@ async def reply(update, context):
     
     if user_message == "/start":
         await start(chatid, context)
+    elif user_message == "/help":
+        await help_command(update, context)
+    elif user_message == "/movies" or user_message == "popular_movies":
+        await now_playing(chatid, context)
+    elif user_message == "/apps" or user_message == "popular_apps":
+        await popular_apps(chatid, context)
     elif user_message == "/load_more":
         await load_more(chatid, context)
     elif re.match(r'^/jav($|\s+)', user_message, re.IGNORECASE):
@@ -25,10 +31,26 @@ async def reply(update, context):
     else:
         await search_engine(user_message, chatid, context)
 
+async def post_init(application: Application):
+    await application.bot.set_my_commands([
+        ("start", "Start the bot"),
+        ("movies", "Get currently playing movies"),
+        ("apps", "Get popular applications"),
+        ("help", "Show help and tips"),
+    ])
+
 if __name__ == '__main__':
     token = my_bot_token()
-    application = Application.builder().token(token).build()
-    hdl = MessageHandler(filters.TEXT, reply)
+    application = Application.builder().token(token).post_init(post_init).build()
+    hdl = MessageHandler(filters.TEXT & (~filters.COMMAND), reply)
+    # Command handlers
+    from telegram.ext import CommandHandler
+    application.add_handler(CommandHandler("start", lambda u, c: start(u.effective_chat.id, c)))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("movies", lambda u, c: now_playing(u.effective_chat.id, c)))
+    application.add_handler(CommandHandler("apps", lambda u, c: popular_apps(u.effective_chat.id, c)))
+    application.add_handler(CommandHandler("jav", lambda u, c: reply(u, c))) # Reuse reply logic for /jav
+    
     application.add_handler(hdl)
     application.add_handler(CallbackQueryHandler(handle_torrent_selection, pattern="^hash_"))
     application.add_handler(CallbackQueryHandler(handle_ijav_download, pattern="^ijavdl_"))

@@ -136,23 +136,43 @@ async def now_playing(chatid, context):
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
             response1 = await client.get(url)
             data1 = response1.json()
-            if "results" not in data1:
-                await context.bot.send_message(chat_id=chatid, text="Error: TMDB API did not return any results.")
-                return
-
             movies = data1["results"]
-            for movie in movies:
-                safe_title = html.escape(movie["title"])
-                movies_under = safe_title.replace(" ", "_")
-                movies_all["title"] = "/"+movies_under
-                movies_all["release_date"] = movie.get("release_date", "N/A")
-                send_data = json.dumps(movies_all).strip(
-                    '{}').replace(',', '\n').replace('"', '')
-                final_data.append(send_data+"\n\n")
-            final_str = listToString(final_data)
-            await context.bot.send_message(chat_id=chatid, text="Click a movie name to copy. Paste and get torrent links." +
-                                "\n\n"+final_str, parse_mode=telegram.constants.ParseMode.HTML)
-            await context.bot.send_message(chat_id=chatid, text='show more movies?\n\n'+"/load_more")
+            for movie in movies[:5]: # Send top 5 with posters
+                title = movie["title"]
+                release = movie.get("release_date", "N/A")
+                poster_path = movie.get("poster_path")
+                overview = movie.get("overview", "")
+                
+                poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
+                
+                caption = (
+                    f"🎬 <b>{html.escape(title)}</b>\n"
+                    f"📅 Release: {release}\n\n"
+                    f"{html.escape(overview[:150])}..."
+                )
+                
+                # Search button for this movie
+                keyboard = [[telegram.InlineKeyboardButton(f"🔍 Search for '{title}'", callback_data=f"search_{title}")]]
+                reply_markup = telegram.InlineKeyboardMarkup(keyboard)
+                
+                if poster_url:
+                    await context.bot.send_photo(
+                        chat_id=chatid,
+                        photo=poster_url,
+                        caption=caption,
+                        reply_markup=reply_markup,
+                        parse_mode=telegram.constants.ParseMode.HTML
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=chatid,
+                        text=caption,
+                        reply_markup=reply_markup,
+                        parse_mode=telegram.constants.ParseMode.HTML
+                    )
+            
+            await context.bot.send_message(chat_id=chatid, text="Want more? /load_more")
+
     except Exception as e:
         import traceback
         print(f"DEBUG Now Playing Error: {traceback.format_exc()}")
@@ -307,6 +327,12 @@ async def handle_torrent_selection(update, context):
     query = update.callback_query
     await query.answer()
     
+    # Handle search triggers from rich previews
+    if query.data.startswith("search_"):
+        search_query = query.data.replace("search_", "")
+        await search_engine(search_query, query.message.chat_id, context)
+        return
+
     # Expected format: hash_{idx}_{info_hash}
     data_parts = query.data.split("_")
     if len(data_parts) < 3:
@@ -348,8 +374,18 @@ async def jav_search(query, chatid, context):
 
             text_lines = [f"🔞 <b>JAV Search Results for '{query}':</b>\n"]
             keyboard_row = []
+            cover_url = None
             
+            # Extract cover for the first result to "WOW" the user
+            first_vid = video_items[0]
+            img_tag = first_vid.find('img')
+            if img_tag:
+                cover_url = img_tag.get('src')
+                if cover_url and not cover_url.startswith('http'):
+                    cover_url = "https://ijavtorrent.com" + cover_url
+
             count = 0
+
             for vid in video_items:
                 if count >= 5: break
                 
@@ -426,12 +462,22 @@ async def jav_search(query, chatid, context):
             reply_markup = telegram.InlineKeyboardMarkup([keyboard_row])
             final_text = "\n".join(text_lines)
             
-            await context.bot.send_message(
-                chat_id=chatid,
-                text=final_text,
-                reply_markup=reply_markup,
-                parse_mode=telegram.constants.ParseMode.HTML
-            )
+            if cover_url:
+                await context.bot.send_photo(
+                    chat_id=chatid,
+                    photo=cover_url,
+                    caption=final_text,
+                    reply_markup=reply_markup,
+                    parse_mode=telegram.constants.ParseMode.HTML
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chatid,
+                    text=final_text,
+                    reply_markup=reply_markup,
+                    parse_mode=telegram.constants.ParseMode.HTML
+                )
+
             await context.bot.delete_message(chat_id=chatid, message_id=status_msg.message_id)
 
     except Exception as e:
@@ -489,3 +535,21 @@ async def handle_ijav_download(update, context):
             text=f"Error downloading torrent: {str(e)[:100]}"
         )
 
+
+async def help_command(update, context):
+    chatid = update.effective_chat.id
+    help_text = (
+        "🔍 <b>Universal Search Bot Help</b>\n\n"
+        "Simply type a movie, app, or JAV code (e.g., <code>Ipzz-198</code>) to search!\n\n"
+        "<b>Available Commands:</b>\n"
+        "• /start - Start the bot\n"
+        "• /movies - Get currently playing movies\n"
+        "• /apps - Get popular applications\n"
+        "• /jav &lt;query&gt; - Direct JAV search\n"
+        "• /help - Show this guide\n\n"
+        "<b>Tips:</b>\n"
+        "• If normal search fails, it automatically checks the JAV database.\n"
+        "• Use the <b>🧲</b> button for magnet links if the direct file fails.\n"
+        "• You can also paste a magnet link to convert it to a .torrent file."
+    )
+    await context.bot.send_message(chat_id=chatid, text=help_text, parse_mode=telegram.constants.ParseMode.HTML)
