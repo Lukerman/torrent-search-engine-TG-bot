@@ -1,37 +1,56 @@
-# Telegram_torrent_bot
+# 🚀 Advanced Torrent Search Telegram Bot
 
-Imagine downloading something from torrent website. Some websites work and some dont or you need a vpn everytime you search on torrent website. You see too many sensored ads. To overcome that and to make torrenting easier i have made a bot in telegram which makes torrenting easier.
+A high-performance, asynchronous Telegram bot built with `python-telegram-bot` v20+ that provides a seamless search experience for movies, apps, and JAV content. Features interactive inline buttons, direct `.torrent` file delivery, and automated search fallbacks.
 
-## Requirements
+## ✨ Key Features
 
-First you need to create a bot in telegram from https://ttttt.me/BotFather  
-After creating, note down the bot token given to your bot.  
+- **🔍 Universal Search**: Type any query (movie name, app title, or JAV code) and the bot will automatically route it to the correct engine.
+- **🔞 Integrated JAV Engine**: Native support for JAV searches with direct `.torrent` file delivery via high-speed proxy.
+- **⚡ Interactive UI**: Uses modern `InlineKeyboardMarkup` buttons for one-tap downloads.
+- **📂 Direct File Delivery**: Automatically converts magnet links (or site download IDs) into downloadable `.torrent` files directly in the chat.
+- **🔄 Smart Fallback**: If the primary torrent database (APIBay) has no results, the bot automatically checks the JAV engine seamlessly.
+- **🛡️ Secure & Clean**: Protected configuration system (`.gitignore`) to prevent secret leakage.
 
-## Installation
+## 🛠️ Installation & Setup
 
-First clone the repo and install required packages by  
-`pip install -r requirements.txt`  
-After installing, change the bot token in token.txt and in app.py with your bot token generated from bot father.  
-Now simply run the app by  
-`python app.py`
+### 1. Clone the Repository
+```bash
+git clone https://github.com/Lukerman/torrent-search-engine-TG-bot.git
+cd torrent-search-engine-TG-bot
+```
 
-## Usage
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
 
-Now you can open the bot and start using. The bot has the following feautures:  
+### 3. Configure API Keys
+1. Copy the example configuration file:
+   ```bash
+   cp configs/url_shit_example.py configs/url_shit.py
+   ```
+2. Open `configs/url_shit.py` and replace the placeholders with your actual:
+   - **Telegram Bot Token** (from @BotFather)
+   - **TMDB API Key** (from [TheMovieDB](https://www.themoviedb.org/documentation/api))
 
-1. Get Latest released movies torrent link.
-2. Get Top movies torrent link.
-3. Search a movie/software/games/apps and get torrent link.  
+### 4. Run the Bot
+```bash
+python app.py
+```
 
-For downloading get the utorrent app for android/iOS/windows and paste the torrent link from the bot.  
+## 📖 Usage
 
-Happy torrenting!  
+- **Start**: Send `/start` to initialize the bot.
+- **Search**: Simply type what you are looking for (e.g., `Inception` or `IPZZ-198`).
+- **JAV Specific**: Use `/jav <query>` for direct JAV-only searches.
+- **Download**: Tap the numbered buttons `[ 1 ]`, `[ 2 ]`, etc., to receive your `.torrent` file instantly.
 
-## Live Bot  
+## 📦 Tech Stack
 
-Bot is running on telegram  
-https://ttttt.me/Torrent_link_bot
+- **Language**: Python 3.10+
+- **Library**: `python-telegram-bot` (Async version)
+- **Networking**: `httpx` (Asynchronous HTTP requests)
+- **Parsing**: `BeautifulSoup4`
 
-## Overlook of the bot
-
-https://user-images.githubusercontent.com/37391678/116362177-6791e800-a81f-11eb-95fd-306a798bb83d.mp4
+---
+Made with ❤️ by [Lukerman](https://github.com/Lukerman)
