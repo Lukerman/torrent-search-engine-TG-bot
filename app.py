@@ -32,6 +32,10 @@ async def reply(update, context):
         await search_engine(user_message, chatid, context)
 
 async def post_init(application: Application):
+    # DYNAMIC FIX: Always clear webhook on startup to prevent Conflict error
+    print("DEBUG: Clearing any existing webhooks...")
+    await application.bot.delete_webhook(drop_pending_updates=True)
+    
     await application.bot.set_my_commands([
         ("start", "Start the bot"),
         ("movies", "Get currently playing movies"),
@@ -54,4 +58,7 @@ if __name__ == '__main__':
     application.add_handler(hdl)
     application.add_handler(CallbackQueryHandler(handle_torrent_selection, pattern="^hash_"))
     application.add_handler(CallbackQueryHandler(handle_ijav_download, pattern="^ijavdl_"))
-    application.run_polling()
+    
+    # DYNAMIC FIX: Use drop_pending_updates=True and a clean polling start
+    print("DEBUG: Starting bot polling...")
+    application.run_polling(drop_pending_updates=True)
